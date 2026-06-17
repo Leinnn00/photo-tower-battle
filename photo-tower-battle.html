@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>📸 フォトタワーバトル</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  background: #1a1a2e;
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-family: 'Hiragino Sans', 'Meiryo', 'Yu Gothic', sans-serif;
+  color: #fff; overflow: hidden; user-select: none;
+}
+
+/* ── タイトル画面 ── */
+#s-title {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 20px; padding: 24px 20px; max-width: 400px; width: 100%;
+}
+.title {
+  font-size: 28px; font-weight: bold; text-align: center;
+  text-shadow: 0 0 24px rgba(255,200,60,.9); letter-spacing: 1px;
+}
+.desc { font-size: 13px; color: rgba(255,255,255,.65); text-align: center; line-height: 1.6; }
+#btn-start {
+  background: linear-gradient(135deg,#4facfe,#00f2fe); border: none;
+  border-radius: 50px; color: #fff; font-size: 22px; font-weight: bold;
+  padding: 16px 56px; cursor: pointer;
+  box-shadow: 0 4px 18px rgba(79,172,254,.5);
+}
+#btn-start:active { opacity: .85; }
+#load-status { font-size: 12px; color: rgba(255,255,255,.45); text-align: center; }
+
+/* ── ゲーム画面 ── */
+#s-game { display: none; position: relative; flex-direction: column; align-items: center; }
+#gc { display: block; touch-action: none; cursor: crosshair; }
+#next-box {
+  position: absolute; right: 8px; top: 8px;
+  text-align: center; pointer-events: none; z-index: 5;
+}
+#next-box .label {
+  font-size: 10px; font-weight: bold; letter-spacing: 1px;
+  color: rgba(255,255,255,.7); margin-bottom: 4px;
+}
+#nc { display: block; }
+
+/* ── 回転ボタン ── */
+#btn-rotate {
+  position: absolute; right: 16px; bottom: 24px;
+  width: 58px; height: 58px; border-radius: 50%;
+  background: rgba(255,255,255,.18);
+  border: 2px solid rgba(255,255,255,.45);
+  color: #fff; font-size: 28px; line-height: 1;
+  cursor: pointer; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+  user-select: none; -webkit-user-select: none;
+  transition: background .1s;
+}
+#btn-rotate:active { background: rgba(255,255,255,.35); }
+
+/* ── ゲームオーバー ── */
+#go {
+  display: none; position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  background: rgba(8,8,24,.92); border-radius: 20px;
+  padding: 28px 36px; text-align: center; z-index: 20;
+  border: 1px solid rgba(255,255,255,.15); min-width: 200px;
+}
+#go .emoji { font-size: 44px; margin-bottom: 8px; }
+#go h2 { font-size: 24px; margin-bottom: 12px; }
+#go .score { font-size: 17px; color: #ffd700; }
+#go .best  { font-size: 13px; color: rgba(255,255,255,.5); margin-bottom: 20px; }
+#go .btn-retry {
+  background: linear-gradient(135deg,#f093fb,#f5576c);
+  border: none; border-radius: 50px; color: #fff;
+  font-size: 17px; font-weight: bold; padding: 12px 32px;
+  cursor: pointer; width: 100%; margin-bottom: 10px;
+}
+#go .btn-title {
+  background: none; border: 1px solid rgba(255,255,255,.3);
+  border-radius: 50px; color: rgba(255,255,255,.65);
+  font-size: 13px; padding: 8px 20px; cursor: pointer; width: 100%;
+}
+</style>
+</head>
+<body>
+
+<!-- タイトル画面 -->
+<div id="s-title">
+  <div class="title">📸 フォトタワーバトル</div>
+  <div class="desc">台の上に写真キャラを積み上げよう<br>一つでも落としたらゲームオーバー</div>
+  <div id="load-status">画像を読み込み中...</div>
+  <button id="btn-start" disabled onclick="startGame()">🎮 スタート！</button>
+</div>
+
+<!-- ゲーム画面 -->
+<div id="s-game">
+  <canvas id="gc"></canvas>
+  <div id="next-box">
+    <div class="label">NEXT</div>
+    <canvas id="nc" width="58" height="58"></canvas>
+  </div>
+  <button id="btn-rotate" onclick="rotateDropper()">↻</button>
+  <div id="go">
+    <div class="emoji">😱</div>
+    <h2>落としちゃった！</h2>
+    <p class="score">積み上げた数: <strong id="go-n">0</strong></p>
+    <p class="best">ベスト: <strong id="go-b">0</strong></p>
+    <button class="btn-retry" onclick="restartGame()">もう一度！</button>
+    <button class="btn-title"  onclick="goTitle()">タイトルへ</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script>
+
+// ════════════════════════════════════════════════════════
+//
+//  ★ ここを編集してね ★
+//
+// ════════════════════════════════════════════════════════
+
+// 【キャラクター設定】
+// src  : HTML と同じフォルダに置いた画像のファイル名
+// hull : 当たり判定の頂点座標。null にすると透過部分から自動生成。
+//        手動で指定する場合は [-1.0, 1.0] の正規化座標で書く。
+//          中心 = (0, 0)
+//          上端 = y: -1.0 ／ 下端 = y: 1.0
+//          左端 = x: -1.0 ／ 右端 = x: 1.0
+//        ※ 時計回りでも反時計回りでも OK
+
+const CHARACTERS = [
+  {
+    src: 'Kota1.png',
+    hull: null,  // 透過PNGなら自動計算でOK
+    size: 55,    // サイズ (px)。null にするとランダム
+  },
+  {
+    src: 'Lein1.png',
+    hull: null,
+    size: 55,
+  },
+  {
+    src: 'Oozora1.png',
+    hull: null,
+    size: 40,
+  },
+  {
+    src: 'Raiya1.png',
+    hull: null,
+    size: 45,
+  },
+  {
+    src: 'Syatyou1.png',
+    hull: null,
+    size: 70,
+  },
+  {
+    src: 'Minori1.png',
+    hull: null,
+    size: 30,
+  },
+  {
+    src: 'Aniki1.png',
+    hull: null,
+    size: null,
+  }
+  // hull を手動指定する例（人型のざっくりした形）:
+  // {
+  //   src: 'chara3.png',
+  //   hull: [
+  //     { x: -0.25, y: -1.00 },  // 頭の左
+  //     { x:  0.25, y: -1.00 },  // 頭の右
+  //     { x:  0.50, y: -0.40 },  // 右肩
+  //     { x:  0.40, y:  0.20 },  // 右腰
+  //     { x:  0.25, y:  1.00 },  // 右足
+  //     { x: -0.25, y:  1.00 },  // 左足
+  //     { x: -0.40, y:  0.20 },  // 左腰
+  //     { x: -0.50, y: -0.40 },  // 左肩
+  //   ],
+  // },
+];
+
+// 【物理設定】
+const phyOpts = {
+  gravity:     1.2,   // 重力（大きいほど速く落ちる）
+  friction:    50000.0,  // 動摩擦（大きいほど滑りにくい）
+  fStatic:     50000.0,  // 静止摩擦（積み上げ後のズレに効く）
+  restitution: 0.0,   // バウンス（0=跳ねない、1=よく跳ねる）
+  fAir:        0.03,  // 空気抵抗
+};
+
+// 【オブジェクトのサイズ】 (px) と出現確率
+const SIZES = [52, 66, 82];
+const PROBS = [0.30, 0.45, 0.25];
+
+// 【台の設定】
+const PLAT_W = 260;  // 幅 (px)
+
+// ════════════════════════════════════════════════════════
+//  以下はゲームのコード（通常は編集不要）
+// ════════════════════════════════════════════════════════
+
+const PROC    = 100;
+const PH      = 50;
+const ALPHA_TH = 25;
+const MAX_HULL = 12;
+
+const GW = Math.min(400, window.innerWidth);
+const GH = Math.min(700, window.innerHeight - 4);
+
+const PLAT_H = 14;
+const PLAT_X = GW / 2;
+const PLAT_Y = Math.round(GH * 0.78);
+const DROP_Y = 58;
+const DX_MIN = PLAT_X - PLAT_W / 2 - 40;
+const DX_MAX = PLAT_X + PLAT_W / 2 + 40;
+
+// ── 画像ロード ──
+let procObjs = [];
+
+function loadAll() {
+  const statusEl = document.getElementById('load-status');
+  let loaded = 0, failed = 0;
+
+  const update = () => {
+    const done = loaded + failed;
+    statusEl.textContent = `画像 ${done} / ${CHARACTERS.length} 読み込み中...`;
+    if (done < CHARACTERS.length) return;
+
+    if (procObjs.length === 0) {
+      statusEl.textContent = '⚠ 画像を読み込めませんでした。ファイル名を確認してください。';
+      return;
+    }
+    statusEl.textContent = `✅ ${procObjs.length} キャラ準備完了`;
+    document.getElementById('btn-start').disabled = false;
+  };
+
+  CHARACTERS.forEach(ch => {
+    const img = new Image();
+    img.onload = () => {
+      const po = ch.hull ? processManual(img, ch.hull) : processAuto(img);
+      if (po) { po.size = ch.size ?? null; procObjs.push(po); }
+      else failed++;
+      loaded++;
+      update();
+    };
+    img.onerror = () => { failed++; update(); };
+    img.src = ch.src;
+  });
+
+  if (CHARACTERS.length === 0) {
+    statusEl.textContent = '⚠ CHARACTERS が空です。';
+  }
+}
+
+// ── 凸包 (monotone chain) ──
+function convexHull(pts) {
+  if (pts.length < 3) return pts;
+  const s = [...pts].sort((a, b) => a.x !== b.x ? a.x - b.x : a.y - b.y);
+  const cross = (O, A, B) => (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x);
+  const lo = [], hi = [];
+  for (const p of s) {
+    while (lo.length >= 2 && cross(lo.at(-2), lo.at(-1), p) <= 0) lo.pop();
+    lo.push(p);
+  }
+  for (let i = s.length - 1; i >= 0; i--) {
+    const p = s[i];
+    while (hi.length >= 2 && cross(hi.at(-2), hi.at(-1), p) <= 0) hi.pop();
+    hi.push(p);
+  }
+  hi.pop(); lo.pop();
+  return lo.concat(hi);
+}
+
+// ── 透過PNGから自動生成 ──
+function processAuto(img) {
+  const ar = img.naturalWidth / img.naturalHeight;
+  let dw, dh;
+  if (ar >= 1) { dw = PROC; dh = PROC / ar; }
+  else          { dh = PROC; dw = PROC * ar; }
+  const dx = (PROC - dw) / 2, dy = (PROC - dh) / 2;
+
+  const pc = Object.assign(document.createElement('canvas'), { width: PROC, height: PROC });
+  const px = pc.getContext('2d');
+  px.drawImage(img, dx, dy, dw, dh);
+
+  let data;
+  try {
+    data = px.getImageData(0, 0, PROC, PROC).data;
+  } catch (e) {
+    // file:// で開いた場合は getImageData がブロックされる → 四角形フォールバック
+    console.warn('getImageData blocked (file:// protocol). Using rectangle hull.');
+    return finalize(img, [
+      { x: -PH, y: -PH }, { x: PH, y: -PH },
+      { x: PH, y: PH },   { x: -PH, y: PH },
+    ], dw, dh);
+  }
+
+  const pts = [];
+  for (let y = 0; y < PROC; y += 3)
+    for (let x = 0; x < PROC; x += 3)
+      if (data[(y * PROC + x) * 4 + 3] > ALPHA_TH)
+        pts.push({ x: x - PH, y: y - PH });
+
+  if (pts.length < 3) return null;
+
+  let hull = convexHull(pts);
+  if (hull.length > MAX_HULL) {
+    const stride = hull.length / MAX_HULL;
+    hull = Array.from({ length: MAX_HULL }, (_, i) => hull[Math.round(i * stride) % hull.length]);
+  }
+  if (hull.length < 3) return null;
+
+  return finalize(img, hull, dw, dh);
+}
+
+// ── 手動座標 [-1,1] から生成 ──
+function processManual(img, rawHull) {
+  // [-1,1] → [-PH, PH] に変換
+  const hull = rawHull.map(p => ({ x: p.x * PH, y: p.y * PH }));
+  if (hull.length < 3) return null;
+
+  const ar = img.naturalWidth / img.naturalHeight;
+  let dw, dh;
+  if (ar >= 1) { dw = PROC; dh = PROC / ar; }
+  else          { dh = PROC; dw = PROC * ar; }
+
+  return finalize(img, hull, dw, dh);
+}
+
+// 頂点平均を原点に揃えて返す（Matter.js の内部挙動に合わせる）
+function finalize(img, hull, dw, dh) {
+  const avgX = hull.reduce((s, p) => s + p.x, 0) / hull.length;
+  const avgY = hull.reduce((s, p) => s + p.y, 0) / hull.length;
+  const hullC  = hull.map(p => ({ x: p.x - avgX, y: p.y - avgY }));
+  const imgOff = { x: -avgX, y: -avgY };
+  return { img, hullC, imgOff, dw, dh };
+}
+
+// ── アイテム生成 ──
+function pickSize() {
+  let r = Math.random(), a = 0;
+  for (let i = 0; i < PROBS.length; i++) { a += PROBS[i]; if (r < a) return SIZES[i]; }
+  return SIZES[0];
+}
+
+function makeItem(po) {
+  const ts    = po.size ?? pickSize();
+  const scale = ts / PH;
+  return {
+    img:      po.img,
+    hull:     po.hullC.map(p => ({ x: p.x * scale, y: p.y * scale })),
+    imgOff:   { x: po.imgOff.x * scale, y: po.imgOff.y * scale },
+    displayW: po.dw * scale,
+    displayH: po.dh * scale,
+  };
+}
+
+// ── ゲーム状態 ──
+let engine, world;
+let bodies   = [];
+let pending  = null;
+let nextItem = null;
+let dropperX  = PLAT_X;
+let dropAngle = 0;   // 現在の回転角 (rad)
+let canDrop  = true;
+let isGO     = false;
+let score    = 0;
+let best     = 0;
+let rafId    = null;
+let lastT    = 0;
+let inputReady = false;
+let gc, ctx, nc, nctx;
+
+// ── 開始 ──
+function startGame() {
+  document.getElementById('s-title').style.display = 'none';
+  const sg = document.getElementById('s-game');
+  sg.style.display = 'flex';
+
+  gc  = document.getElementById('gc');
+  gc.width = GW; gc.height = GH;
+  ctx = gc.getContext('2d');
+  nc   = document.getElementById('nc');
+  nctx = nc.getContext('2d');
+
+  initPhysics();
+  if (!inputReady) { bindInput(); inputReady = true; }
+  resetState();
+
+  lastT = performance.now();
+  rafId = requestAnimationFrame(loop);
+}
+
+function initPhysics() {
+  if (engine) { Matter.World.clear(world); Matter.Engine.clear(engine); }
+  engine = Matter.Engine.create();
+  engine.positionIterations = 20;
+  engine.velocityIterations = 20;
+  world  = engine.world;
+  engine.gravity.y = phyOpts.gravity;
+
+  Matter.World.add(world,
+    Matter.Bodies.rectangle(PLAT_X, PLAT_Y, PLAT_W, PLAT_H, {
+      isStatic: true, label: 'plat',
+      friction: 10.0, frictionStatic: 10.0, restitution: 0.0,
+    })
+  );
+}
+
+function randProc() { return procObjs[Math.floor(Math.random() * procObjs.length)]; }
+
+function resetState() {
+  bodies    = [];
+  score     = 0;
+  isGO      = false;
+  canDrop   = true;
+  dropperX  = PLAT_X;
+  dropAngle = 0;
+  pending  = makeItem(randProc());
+  nextItem = makeItem(randProc());
+  drawNext();
+  document.getElementById('go').style.display = 'none';
+}
+
+// ── 入力 ──
+function bindInput() {
+  const el = document.getElementById('gc');
+  const getX = e => {
+    const r = el.getBoundingClientRect();
+    return (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+  };
+  el.addEventListener('mousemove', e => { if (!isGO && canDrop) dropperX = clamp(getX(e)); });
+  el.addEventListener('click', tryDrop);
+  el.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (!isGO && canDrop) dropperX = clamp(getX(e));
+  }, { passive: false });
+  el.addEventListener('touchend', e => { e.preventDefault(); tryDrop(); }, { passive: false });
+}
+
+function clamp(x) { return Math.max(DX_MIN, Math.min(DX_MAX, x)); }
+
+// ── 回転 ──
+function rotateDropper() {
+  if (isGO || !canDrop) return;
+  dropAngle = (dropAngle + Math.PI / 4) % (Math.PI * 2);
+}
+
+// ── ドロップ ──
+function tryDrop() {
+  if (isGO || !canDrop || !pending) return;
+
+  const { hull, imgOff, displayW, displayH, img } = pending;
+
+  let body;
+  try {
+    body = Matter.Bodies.fromVertices(dropperX, DROP_Y, hull, {
+      restitution: phyOpts.restitution, friction: phyOpts.friction,
+      frictionStatic: phyOpts.fStatic, frictionAir: phyOpts.fAir, density: 0.004,
+    });
+    if (!body?.vertices?.length) throw 0;
+  } catch (_) {
+    const r = Math.max(...hull.map(p => Math.hypot(p.x, p.y))) || 40;
+    body = Matter.Bodies.circle(dropperX, DROP_Y, r, {
+      restitution: phyOpts.restitution, friction: phyOpts.friction,
+      frictionStatic: phyOpts.fStatic, frictionAir: phyOpts.fAir, density: 0.004,
+    });
+  }
+
+  const corrX = dropperX - body.position.x;
+  const corrY = DROP_Y   - body.position.y;
+  Matter.Body.setAngle(body, dropAngle);
+  bodies.push({ body, img, displayW, displayH, imgOff: { x: imgOff.x + corrX, y: imgOff.y + corrY } });
+  Matter.World.add(world, body);
+
+  score++;
+  dropAngle = 0;
+  pending  = nextItem;
+  nextItem = makeItem(randProc());
+  drawNext();
+
+  canDrop = false;
+  setTimeout(() => { canDrop = true; }, 650);
+}
+
+// ── ゲームループ ──
+function loop(t) {
+  const dt = Math.min(t - lastT, 50);
+  lastT = t;
+  if (!isGO) { Matter.Engine.update(engine, dt); checkFall(); }
+  render();
+  rafId = requestAnimationFrame(loop);
+}
+
+function checkFall() {
+  for (const obj of bodies) {
+    if (obj.body.position.y > GH + 80) { triggerGameOver(); return; }
+  }
+}
+
+function triggerGameOver() {
+  isGO = true;
+  if (score > best) best = score;
+  document.getElementById('go-n').textContent = score;
+  document.getElementById('go-b').textContent  = best;
+  document.getElementById('go').style.display  = 'block';
+}
+
+// ── 描画 ──
+function render() {
+  ctx.clearRect(0, 0, GW, GH);
+
+  const sky = ctx.createLinearGradient(0, 0, 0, GH);
+  sky.addColorStop(0,    '#87CEEB');
+  sky.addColorStop(0.55, '#B8E4F8');
+  sky.addColorStop(0.80, '#D0EDB8');
+  sky.addColorStop(1,    '#7AB857');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, GW, GH);
+
+  drawClouds();
+  drawPlatform();
+
+  for (const obj of bodies) drawBody(obj);
+
+  if (pending && canDrop && !isGO) {
+    const { img, displayW, displayH, imgOff } = pending;
+    ctx.save();
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(dropperX, DROP_Y + displayH * 0.5);
+    ctx.lineTo(dropperX, PLAT_Y - PLAT_H / 2);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.82;
+    ctx.translate(dropperX, DROP_Y);
+    ctx.rotate(dropAngle);
+    ctx.drawImage(img, imgOff.x - displayW / 2, imgOff.y - displayH / 2, displayW, displayH);
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,.48)';
+  rrect(ctx, 8, 8, 126, 36, 10); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 15px "Hiragino Sans",Meiryo,sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🏆 ' + score + '個', 16, 27);
+  ctx.restore();
+}
+
+function drawBody(obj) {
+  const { body, img, displayW, displayH, imgOff } = obj;
+  ctx.save();
+  ctx.translate(body.position.x, body.position.y);
+  ctx.rotate(body.angle);
+  ctx.drawImage(img, imgOff.x - displayW / 2, imgOff.y - displayH / 2, displayW, displayH);
+  ctx.restore();
+}
+
+function drawPlatform() {
+  const px = PLAT_X - PLAT_W / 2, py = PLAT_Y - PLAT_H / 2;
+  const legW = 10, legH = GH - PLAT_Y + 10;
+
+  ctx.save();
+  const lg = ctx.createLinearGradient(0, PLAT_Y, 0, PLAT_Y + legH);
+  lg.addColorStop(0, '#7a5018'); lg.addColorStop(1, '#3a2008');
+  ctx.fillStyle = lg;
+  ctx.fillRect(px + 18, PLAT_Y, legW, legH);
+  ctx.fillRect(px + PLAT_W - 18 - legW, PLAT_Y, legW, legH);
+  ctx.restore();
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,.22)';
+  rrect(ctx, px + 5, py + 6, PLAT_W, PLAT_H + 4, 5); ctx.fill();
+  const pg = ctx.createLinearGradient(0, py, 0, py + PLAT_H);
+  pg.addColorStop(0, '#f0c060'); pg.addColorStop(0.35, '#c88a28'); pg.addColorStop(1, '#7a5010');
+  ctx.fillStyle = pg;
+  rrect(ctx, px, py, PLAT_W, PLAT_H, 5); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.28)';
+  ctx.fillRect(px + 6, py + 2, PLAT_W - 12, 4);
+  ctx.strokeStyle = 'rgba(0,0,0,.12)'; ctx.lineWidth = 1;
+  for (let gx = px + 24; gx < px + PLAT_W - 12; gx += 26) {
+    ctx.beginPath(); ctx.moveTo(gx, py + 2); ctx.lineTo(gx + 4, py + PLAT_H - 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawClouds() {
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,.82)';
+  [[55,45,0.9],[200,25,0.7],[340,55,0.85]].forEach(([cx,cy,s]) => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, 22*s, 0, Math.PI*2);
+    ctx.arc(cx+18*s, cy-8*s, 16*s, 0, Math.PI*2);
+    ctx.arc(cx+34*s, cy+3*s, 18*s, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawNext() {
+  const sz = 58;
+  nc.width = nc.height = sz;
+  nctx.clearRect(0, 0, sz, sz);
+  if (!nextItem) return;
+  const { img, displayW, displayH, imgOff } = nextItem;
+  const s = Math.min((sz-4)/displayW, (sz-4)/displayH);
+  nctx.save();
+  nctx.translate(sz/2, sz/2);
+  nctx.drawImage(img, (imgOff.x - displayW/2)*s, (imgOff.y - displayH/2)*s, displayW*s, displayH*s);
+  nctx.restore();
+}
+
+function rrect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+  ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
+  ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r);
+  ctx.closePath();
+}
+
+// ── リスタート / タイトルへ ──
+function restartGame() {
+  cancelAnimationFrame(rafId);
+  initPhysics();
+  resetState();
+  lastT = performance.now();
+  rafId = requestAnimationFrame(loop);
+}
+
+function goTitle() {
+  cancelAnimationFrame(rafId);
+  document.getElementById('go').style.display = 'none';
+  document.getElementById('s-game').style.display = 'none';
+  document.getElementById('s-title').style.display = 'flex';
+}
+
+// ── 起動 ──
+loadAll();
+</script>
+</body>
+</html>
