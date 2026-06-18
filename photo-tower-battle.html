@@ -407,7 +407,7 @@ function initPhysics() {
   Matter.World.add(world,
     Matter.Bodies.rectangle(PLAT_X, PLAT_Y, PLAT_W, PLAT_H, {
       isStatic: true, label: 'plat',
-      friction: 10.0, frictionStatic: 10.0, restitution: 0.0,
+      friction: 50000.0, frictionStatic: 50000.0, restitution: 0.0,
     })
   );
 }
