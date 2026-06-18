@@ -39,6 +39,10 @@ body {
 #next-box {
   position: absolute; right: 8px; top: 8px;
   text-align: center; pointer-events: none; z-index: 5;
+  background: rgba(0,0,0,.35);
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: 10px;
+  padding: 6px 8px;
 }
 #next-box .label {
   font-size: 10px; font-weight: bold; letter-spacing: 1px;
@@ -90,7 +94,7 @@ body {
 <!-- タイトル画面 -->
 <div id="s-title">
   <div class="title">WSDLタワー</div>
-  <div style="font-size:11px; color:rgba(255,255,255,.4); margin-top:-12px;">v1.9</div>
+  <div style="font-size:11px; color:rgba(255,255,255,.4); margin-top:-12px;">v2.0</div>
   <div class="desc">台の上に写真キャラを積み上げよう<br>一つでも落としたらゲームオーバー</div>
   <div id="load-status">画像を読み込み中...</div>
   <button id="btn-start" disabled onclick="startGame()">🎮 スタート！</button>
@@ -102,6 +106,7 @@ body {
   <div id="next-box">
     <div class="label">NEXT</div>
     <canvas id="nc" width="58" height="58"></canvas>
+    <div id="next-name" style="font-size:10px; color:rgba(255,255,255,.8); margin-top:4px;"></div>
   </div>
   <button id="btn-rotate" onclick="rotateDropper()">↻</button>
   <div id="go">
@@ -135,36 +140,43 @@ body {
 const CHARACTERS = [
   {
     src: 'Kota1.png',
+    name: 'こうた',
     hull: null,  // 透過PNGなら自動計算でOK
     size: 55,    // サイズ (px)。null にするとランダム
   },
   {
     src: 'Lein1.png',
+    name: 'れいん',
     hull: null,
     size: 55,
   },
   {
     src: 'Oozora1.png',
+    name: 'おーぞら',
     hull: null,
     size: 40,
   },
   {
     src: 'Raiya1.png',
+    name: 'らいや',
     hull: null,
     size: 45,
   },
   {
     src: 'Syatyou1.png',
+    name: '社長',
     hull: null,
     size: 70,
   },
   {
     src: 'Minori1.png',
+    name: '猿飛ヒルゼン',
     hull: null,
     size: 30,
   },
   {
     src: 'Aniki1.png',
+    name: 'アニキ',
     hull: null,
     size: null,
   }
@@ -243,7 +255,7 @@ function loadAll() {
     const img = new Image();
     img.onload = () => {
       const po = ch.hull ? processManual(img, ch.hull) : processAuto(img);
-      if (po) { po.size = ch.size ?? null; procObjs.push(po); }
+      if (po) { po.size = ch.size ?? null; po.name = ch.name ?? ''; procObjs.push(po); }
       else failed++;
       loaded++;
       update();
@@ -353,6 +365,7 @@ function makeItem(po) {
   const scale = ts / PH;
   return {
     img:      po.img,
+    name:     po.name,
     hull:     po.hullC.map(p => ({ x: p.x * scale, y: p.y * scale })),
     imgOff:   { x: po.imgOff.x * scale, y: po.imgOff.y * scale },
     displayW: po.dw * scale,
@@ -398,9 +411,9 @@ function startGame() {
 
 function initPhysics() {
   if (engine) { Matter.World.clear(world); Matter.Engine.clear(engine); }
-  engine = Matter.Engine.create();
-  engine.positionIterations = 20;
-  engine.velocityIterations = 20;
+  engine = Matter.Engine.create({ enableSleeping: true });
+  engine.positionIterations = 50;
+  engine.velocityIterations = 50;
   world  = engine.world;
   engine.gravity.y = phyOpts.gravity;
 
@@ -503,6 +516,7 @@ function checkFall() {
   }
 }
 
+
 function triggerGameOver() {
   isGO = true;
   if (score > best) best = score;
@@ -523,7 +537,6 @@ function render() {
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, GW, GH);
 
-  drawClouds();
   drawPlatform();
 
   for (const obj of bodies) drawBody(obj);
@@ -613,12 +626,13 @@ function drawNext() {
   nc.width = nc.height = sz;
   nctx.clearRect(0, 0, sz, sz);
   if (!nextItem) return;
-  const { img, displayW, displayH, imgOff } = nextItem;
+  const { img, name, displayW, displayH, imgOff } = nextItem;
   const s = Math.min((sz-4)/displayW, (sz-4)/displayH);
   nctx.save();
   nctx.translate(sz/2, sz/2);
   nctx.drawImage(img, (imgOff.x - displayW/2)*s, (imgOff.y - displayH/2)*s, displayW*s, displayH*s);
   nctx.restore();
+  document.getElementById('next-name').textContent = name ?? '';
 }
 
 function rrect(ctx, x, y, w, h, r) {
