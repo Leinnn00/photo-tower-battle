@@ -113,6 +113,69 @@ body {
   border-radius: 50px; color: rgba(255,255,255,.45);
   font-size: 12px; padding: 6px 16px; cursor: pointer;
 }
+
+/* ── 対戦ボタン (タイトル) ── */
+#btn-battle {
+  background: linear-gradient(135deg,#f093fb,#f5576c); border: none;
+  border-radius: 50px; color: #fff; font-size: 19px; font-weight: bold;
+  padding: 14px 48px; cursor: pointer;
+  box-shadow: 0 4px 18px rgba(240,147,251,.4);
+}
+#btn-battle:disabled { opacity: .45; cursor: default; }
+#btn-battle:active { opacity: .85; }
+
+/* ── バトルロビー画面 ── */
+#s-battle {
+  display: none; flex-direction: column; align-items: center;
+  gap: 18px; padding: 24px 20px; max-width: 400px; width: 100%;
+}
+#battle-create {
+  display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%;
+}
+#btn-create-room {
+  background: linear-gradient(135deg,#4facfe,#00f2fe); border: none;
+  border-radius: 50px; color: #fff; font-size: 18px; font-weight: bold;
+  padding: 14px 44px; cursor: pointer; width: 100%;
+  box-shadow: 0 4px 16px rgba(79,172,254,.4);
+}
+.battle-sep { font-size: 12px; color: rgba(255,255,255,.3); letter-spacing: 2px; }
+#room-input {
+  background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.3);
+  border-radius: 12px; color: #fff; font-size: 28px; font-weight: bold;
+  padding: 10px 16px; width: 100%; text-align: center; letter-spacing: 6px;
+  outline: none;
+}
+#room-input::placeholder { color: rgba(255,255,255,.2); letter-spacing: 2px; }
+#btn-join-room {
+  background: linear-gradient(135deg,#43e97b,#38f9d7); border: none;
+  border-radius: 50px; color: #222; font-size: 18px; font-weight: bold;
+  padding: 14px 44px; cursor: pointer; width: 100%;
+}
+#room-display {
+  display: none; flex-direction: column; align-items: center; gap: 10px;
+  width: 100%;
+}
+#room-code-display {
+  font-size: 52px; font-weight: bold; letter-spacing: 10px;
+  color: #ffd700; text-shadow: 0 0 20px rgba(255,215,0,.6);
+}
+.room-label { font-size: 12px; color: rgba(255,255,255,.5); letter-spacing: 1px; }
+.waiting-text { font-size: 14px; color: rgba(255,255,255,.65); }
+#btn-cancel-battle {
+  background: none; border: 1px solid rgba(255,255,255,.25);
+  border-radius: 50px; color: rgba(255,255,255,.55);
+  font-size: 13px; padding: 9px 24px; cursor: pointer;
+}
+
+/* ── ターンインジケーター ── */
+#turn-indicator {
+  display: none; position: absolute; top: 8px; left: 8px;
+  font-size: 13px; font-weight: bold; padding: 7px 14px;
+  border-radius: 20px; pointer-events: none; z-index: 10;
+  transition: background .3s;
+}
+#turn-indicator.my-turn    { background: rgba(79,172,254,.35); color: #fff; }
+#turn-indicator.their-turn { background: rgba(240,80,80,.35);  color: #fff; }
 </style>
 </head>
 <body>
@@ -120,11 +183,29 @@ body {
 <!-- タイトル画面 -->
 <div id="s-title">
   <div class="title">WSDLタワー</div>
-  <div style="font-size:11px; color:rgba(255,255,255,.4); margin-top:-12px;">v2.0</div>
+  <div style="font-size:11px; color:rgba(255,255,255,.4); margin-top:-12px;">v2.1</div>
   <div class="desc">台の上に写真キャラを積み上げよう<br>一つでも落としたらゲームオーバー</div>
   <div id="load-status">画像を読み込み中...</div>
-  <button id="btn-start" disabled onclick="startGame()">🎮 スタート！</button>
+  <button id="btn-start" disabled onclick="startSolo()">🎮 ソロプレイ</button>
+  <button id="btn-battle" disabled onclick="openBattle()">⚔️ 対戦</button>
   <button class="btn-patch" onclick="openPatch()">📋 パッチノートを確認</button>
+</div>
+
+<!-- バトルロビー画面 -->
+<div id="s-battle">
+  <div class="title">⚔️ 対戦モード</div>
+  <div id="battle-create">
+    <button id="btn-create-room" onclick="createRoom()">🏠 ルームを作る</button>
+    <div class="battle-sep">─── または ───</div>
+    <input id="room-input" type="number" inputmode="numeric" placeholder="コード入力" maxlength="4">
+    <button id="btn-join-room" onclick="joinRoom()">🚪 参加する</button>
+  </div>
+  <div id="room-display">
+    <div class="room-label">ルームコード</div>
+    <div id="room-code-display"></div>
+    <div class="waiting-text">相手の参加を待っています...</div>
+  </div>
+  <button id="btn-cancel-battle" onclick="cancelBattle()">← タイトルへ戻る</button>
 </div>
 
 <!-- パッチノートポップアップ -->
@@ -150,16 +231,18 @@ body {
     <div id="next-name" style="font-size:10px; color:rgba(255,255,255,.8); margin-top:4px;"></div>
   </div>
   <button id="btn-rotate" onclick="rotateDropper()">↻</button>
+  <div id="turn-indicator"></div>
   <div id="go">
-    <div class="emoji">😱</div>
-    <h2>落としちゃった！</h2>
+    <div id="go-emoji" class="emoji">😱</div>
+    <h2 id="go-title-text">落としちゃった！</h2>
     <p class="score">積み上げた数: <strong id="go-n">0</strong></p>
-    <p class="best">ベスト: <strong id="go-b">0</strong></p>
-    <button class="btn-retry" onclick="restartGame()">もう一度！</button>
-    <button class="btn-title"  onclick="goTitle()">タイトルへ</button>
+    <p id="go-best-row" class="best">ベスト: <strong id="go-b">0</strong></p>
+    <button id="go-retry" class="btn-retry" onclick="restartGame()">もう一度！</button>
+    <button class="btn-title" onclick="goTitle()">タイトルへ</button>
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 <script>
 
@@ -289,14 +372,15 @@ function loadAll() {
       return;
     }
     statusEl.textContent = `✅ ${procObjs.length} キャラ準備完了`;
-    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-start').disabled  = false;
+    document.getElementById('btn-battle').disabled = false;
   };
 
   CHARACTERS.forEach(ch => {
     const img = new Image();
     img.onload = () => {
       const po = ch.hull ? processManual(img, ch.hull) : processAuto(img);
-      if (po) { po.size = ch.size ?? null; po.name = ch.name ?? ''; procObjs.push(po); }
+      if (po) { po.size = ch.size ?? null; po.name = ch.name ?? ''; po.src = ch.src; procObjs.push(po); }
       else failed++;
       loaded++;
       update();
@@ -405,8 +489,10 @@ function makeItem(po) {
   const ts    = po.size ?? pickSize();
   const scale = ts / PH;
   return {
-    img:      po.img,
-    name:     po.name,
+    img:        po.img,
+    name:       po.name,
+    src:        po.src,        // バトル同期用
+    actualSize: ts,            // バトル同期用
     hull:     po.hullC.map(p => ({ x: p.x * scale, y: p.y * scale })),
     imgOff:   { x: po.imgOff.x * scale, y: po.imgOff.y * scale },
     displayW: po.dw * scale,
@@ -430,9 +516,21 @@ let lastT    = 0;
 let inputReady = false;
 let gc, ctx, nc, nctx;
 
+// ── バトルモード状態 ──
+let isBattleMode  = false;
+let isMyTurn      = false;
+let battleChannel = null;
+let sbClient      = null;
+
 // ── 開始 ──
-function startGame() {
-  document.getElementById('s-title').style.display = 'none';
+function startSolo() {
+  isBattleMode = false;
+  isMyTurn     = false;
+  startGame('s-title');
+}
+
+function startGame(fromScreen) {
+  document.getElementById(fromScreen || 's-title').style.display = 'none';
   const sg = document.getElementById('s-game');
   sg.style.display = 'flex';
 
@@ -445,6 +543,7 @@ function startGame() {
   initPhysics();
   if (!inputReady) { bindInput(); inputReady = true; }
   resetState();
+  updateTurnIndicator();
 
   lastT = performance.now();
   rafId = requestAnimationFrame(loop);
@@ -508,29 +607,15 @@ function rotateDropper() {
 // ── ドロップ ──
 function tryDrop() {
   if (isGO || !canDrop || !pending) return;
+  if (isBattleMode && !isMyTurn) return;
 
-  const { hull, imgOff, displayW, displayH, img } = pending;
+  // バトル同期用に保存
+  const syncSrc   = pending.src;
+  const syncSize  = pending.actualSize;
+  const syncX     = dropperX;
+  const syncAngle = dropAngle;
 
-  let body;
-  try {
-    body = Matter.Bodies.fromVertices(dropperX, DROP_Y, hull, {
-      restitution: phyOpts.restitution, friction: phyOpts.friction,
-      frictionStatic: phyOpts.fStatic, frictionAir: phyOpts.fAir, density: 0.004,
-    });
-    if (!body?.vertices?.length) throw 0;
-  } catch (_) {
-    const r = Math.max(...hull.map(p => Math.hypot(p.x, p.y))) || 40;
-    body = Matter.Bodies.circle(dropperX, DROP_Y, r, {
-      restitution: phyOpts.restitution, friction: phyOpts.friction,
-      frictionStatic: phyOpts.fStatic, frictionAir: phyOpts.fAir, density: 0.004,
-    });
-  }
-
-  const corrX = dropperX - body.position.x;
-  const corrY = DROP_Y   - body.position.y;
-  Matter.Body.setAngle(body, dropAngle);
-  bodies.push({ body, img, displayW, displayH, imgOff: { x: imgOff.x + corrX, y: imgOff.y + corrY } });
-  Matter.World.add(world, body);
+  dropBody(pending, dropperX, dropAngle);
 
   score++;
   dropAngle = 0;
@@ -539,7 +624,38 @@ function tryDrop() {
   drawNext();
 
   canDrop = false;
+
+  if (isBattleMode) {
+    isMyTurn = false;
+    updateTurnIndicator();
+    sendDrop(syncSrc, syncSize, syncX, syncAngle);
+  }
+
   setTimeout(() => { canDrop = true; }, 650);
+}
+
+// 物理ボディを生成してワールドに追加（自分のドロップ・受信ドロップ共通）
+function dropBody(item, x, angle) {
+  const { hull, imgOff, displayW, displayH, img } = item;
+  let body;
+  try {
+    body = Matter.Bodies.fromVertices(x, DROP_Y, hull, {
+      restitution: phyOpts.restitution, friction: phyOpts.friction,
+      frictionStatic: phyOpts.fStatic, frictionAir: phyOpts.fAir, density: 0.004,
+    });
+    if (!body?.vertices?.length) throw 0;
+  } catch (_) {
+    const r = Math.max(...hull.map(p => Math.hypot(p.x, p.y))) || 40;
+    body = Matter.Bodies.circle(x, DROP_Y, r, {
+      restitution: phyOpts.restitution, friction: phyOpts.friction,
+      frictionStatic: phyOpts.fStatic, frictionAir: phyOpts.fAir, density: 0.004,
+    });
+  }
+  const corrX = x       - body.position.x;
+  const corrY = DROP_Y  - body.position.y;
+  Matter.Body.setAngle(body, angle);
+  bodies.push({ body, img, displayW, displayH, imgOff: { x: imgOff.x + corrX, y: imgOff.y + corrY } });
+  Matter.World.add(world, body);
 }
 
 // ── ゲームループ ──
@@ -558,12 +674,30 @@ function checkFall() {
 }
 
 
-function triggerGameOver() {
+function triggerGameOver(iWin = false) {
+  if (isGO) return;
   isGO = true;
-  if (score > best) best = score;
+
+  if (isBattleMode) {
+    // 相手に通知（勝ち側が「負け」を送る → 受け取った方が「勝ち」）
+    if (!iWin && battleChannel) {
+      battleChannel.send({ type: 'broadcast', event: 'gameover', payload: {} });
+    }
+    document.getElementById('go-emoji').textContent      = iWin ? '🏆' : '😭';
+    document.getElementById('go-title-text').textContent = iWin ? 'あなたの勝ち！' : 'あなたの負け...';
+    document.getElementById('go-best-row').style.display = 'none';
+    document.getElementById('go-retry').style.display    = 'none';
+  } else {
+    if (score > best) best = score;
+    document.getElementById('go-emoji').textContent      = '😱';
+    document.getElementById('go-title-text').textContent = '落としちゃった！';
+    document.getElementById('go-best-row').style.display = '';
+    document.getElementById('go-retry').style.display    = '';
+    document.getElementById('go-b').textContent = best;
+  }
+
   document.getElementById('go-n').textContent = score;
-  document.getElementById('go-b').textContent  = best;
-  document.getElementById('go').style.display  = 'block';
+  document.getElementById('go').style.display = 'block';
 }
 
 // ── 描画 ──
@@ -696,14 +830,165 @@ function restartGame() {
 
 function goTitle() {
   cancelAnimationFrame(rafId);
-  document.getElementById('go').style.display = 'none';
-  document.getElementById('s-game').style.display = 'none';
-  document.getElementById('s-title').style.display = 'flex';
+  // バトルチャンネルを切断
+  if (battleChannel) { battleChannel.unsubscribe(); battleChannel = null; }
+  isBattleMode = false;
+  isMyTurn     = false;
+  document.getElementById('go').style.display     = 'none';
+  document.getElementById('s-game').style.display  = 'none';
+  document.getElementById('s-battle').style.display = 'none';
+  document.getElementById('s-title').style.display  = 'flex';
 }
 
 // ── パッチノート ──
 function openPatch()  { document.getElementById('patch-overlay').classList.add('open'); }
 function closePatch() { document.getElementById('patch-overlay').classList.remove('open'); }
+
+// ════════════════════════════════════════════════════════
+//  バトルモード
+// ════════════════════════════════════════════════════════
+const SUPABASE_URL = 'https://hevfrfgnuganjnrjivgw.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_e8tL2pXp_19HriWlgHugMQ_G6vI6Rgd';
+
+function initSupabase() {
+  if (!sbClient) sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+}
+
+// ── バトルロビーを開く ──
+function openBattle() {
+  document.getElementById('s-title').style.display  = 'none';
+  document.getElementById('s-battle').style.display = 'flex';
+  // リセット表示
+  document.getElementById('battle-create').style.display  = 'flex';
+  document.getElementById('room-display').style.display   = 'none';
+  document.getElementById('room-input').value = '';
+}
+
+// ── キャンセル → タイトルへ ──
+function cancelBattle() {
+  if (battleChannel) { battleChannel.unsubscribe(); battleChannel = null; }
+  document.getElementById('s-battle').style.display = 'none';
+  document.getElementById('s-title').style.display  = 'flex';
+}
+
+// ── ルームコード生成 ──
+function genCode() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+// ── ルームを作る（ホスト） ──
+function createRoom() {
+  initSupabase();
+  const code = genCode();
+  isMyTurn = true;  // ホストが先攻
+
+  document.getElementById('battle-create').style.display = 'none';
+  document.getElementById('room-display').style.display  = 'flex';
+  document.getElementById('room-code-display').textContent = code;
+
+  joinChannel(code, true);
+}
+
+// ── ルームに参加（ゲスト） ──
+function joinRoom() {
+  initSupabase();
+  const code = document.getElementById('room-input').value.trim();
+  if (code.length < 4) { alert('4桁のコードを入力してね'); return; }
+  isMyTurn = false; // ゲストが後攻
+
+  document.getElementById('battle-create').style.display = 'none';
+  document.getElementById('room-display').style.display  = 'flex';
+  document.getElementById('room-code-display').textContent = code;
+  document.querySelector('#room-display .waiting-text').textContent = '接続中...';
+
+  joinChannel(code, false);
+}
+
+// ── Supabase チャンネルに接続 ──
+function joinChannel(code, isHost) {
+  if (battleChannel) battleChannel.unsubscribe();
+
+  battleChannel = sbClient.channel('room:' + code, {
+    config: { broadcast: { self: false } }
+  });
+
+  battleChannel
+    .on('broadcast', { event: 'ready' }, () => {
+      // ゲストが参加した → ホストがゲームスタート指示を出す
+      if (isHost) {
+        battleChannel.send({ type: 'broadcast', event: 'start', payload: {} });
+        startBattleGame();
+      }
+    })
+    .on('broadcast', { event: 'start' }, () => {
+      // ホストからスタート指示を受けた → ゲストもゲーム開始
+      if (!isHost) startBattleGame();
+    })
+    .on('broadcast', { event: 'drop' }, ({ payload }) => {
+      receiveDrop(payload);
+    })
+    .on('broadcast', { event: 'gameover' }, () => {
+      // 相手が落とした → 自分の勝ち
+      triggerGameOver(true);
+    })
+    .subscribe(status => {
+      if (status === 'SUBSCRIBED' && !isHost) {
+        // ゲストが接続完了 → ホストに通知
+        battleChannel.send({ type: 'broadcast', event: 'ready', payload: {} });
+        document.querySelector('#room-display .waiting-text').textContent = 'ホストの開始を待っています...';
+      }
+    });
+}
+
+// ── バトルゲーム開始 ──
+function startBattleGame() {
+  isBattleMode = true;
+  startGame('s-battle');
+}
+
+// ── 自分のドロップを相手に送信 ──
+function sendDrop(src, size, x, angle) {
+  if (!battleChannel) return;
+  battleChannel.send({
+    type: 'broadcast', event: 'drop',
+    payload: { src, size, x, angle }
+  });
+}
+
+// ── 相手のドロップを受信して物理シミュレーションに反映 ──
+function receiveDrop({ src, size, x, angle }) {
+  const po = procObjs.find(p => p.src === src);
+  if (!po || isGO) return;
+
+  const scale  = size / PH;
+  const item = {
+    img:      po.img,
+    hull:     po.hullC.map(p => ({ x: p.x * scale, y: p.y * scale })),
+    imgOff:   { x: po.imgOff.x * scale, y: po.imgOff.y * scale },
+    displayW: po.dw * scale,
+    displayH: po.dh * scale,
+  };
+
+  dropBody(item, x, angle);
+  score++;
+
+  isMyTurn = true;
+  updateTurnIndicator();
+}
+
+// ── ターンインジケーター更新 ──
+function updateTurnIndicator() {
+  const el = document.getElementById('turn-indicator');
+  if (!isBattleMode) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  if (isMyTurn) {
+    el.textContent = '👆 あなたのターン';
+    el.className   = 'my-turn';
+  } else {
+    el.textContent = '⏳ 相手のターン';
+    el.className   = 'their-turn';
+  }
+}
 
 // ── 起動 ──
 loadAll();
