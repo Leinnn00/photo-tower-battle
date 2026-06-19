@@ -245,6 +245,8 @@ body {
     <p class="score">積み上げた数: <strong id="go-n">0</strong></p>
     <p id="go-best-row" class="best">ベスト: <strong id="go-b">0</strong></p>
     <button id="go-retry" class="btn-retry" onclick="restartGame()">もう一度！</button>
+    <button id="go-rematch" class="btn-retry" onclick="requestRematch()" style="display:none;">⚔️ もう一度対戦！</button>
+    <div id="go-rematch-status" style="display:none; font-size:12px; color:rgba(255,255,255,.5); margin-bottom:8px;"></div>
     <button class="btn-title" onclick="goTitle()">タイトルへ</button>
   </div>
 </div>
@@ -536,8 +538,12 @@ let inputReady = false;
 let gc, ctx, nc, nctx;
 
 // ── バトルモード状態 ──
-let isBattleMode  = false;
-let isMyTurn      = false;
+let isBattleMode        = false;
+let isMyTurn            = false;
+let isHostPlayer        = false; // ルーム作成者かどうか
+let rematchFlip         = false; // リマッチのたびに先攻後攻を交代
+let myRematchReady      = false;
+let opponentRematchReady = false;
 let battleChannel = null;
 let sbClient      = null;
 
@@ -691,7 +697,12 @@ function loop(t) {
 
 function checkFall() {
   for (const obj of bodies) {
-    if (obj.body.position.y > GH + 80) { triggerGameOver(); return; }
+    if (obj.body.position.y > GH + 80) {
+      // isMyTurn=false → 自分が直前にドロップ → 自分の負け
+      // isMyTurn=true  → 相手が直前にドロップ → 相手の負け（自分の勝ち）
+      triggerGameOver(isBattleMode && isMyTurn);
+      return;
+    }
   }
 }
 
@@ -701,14 +712,26 @@ function triggerGameOver(iWin = false) {
   isGO = true;
 
   if (isBattleMode) {
-    // 相手に通知（勝ち側が「負け」を送る → 受け取った方が「勝ち」）
-    if (!iWin && battleChannel) {
-      battleChannel.send({ type: 'broadcast', event: 'gameover', payload: {} });
+    // 必ず結果を相手に送信（両画面でズレても正しく判定できるように）
+    // loser:'sender' → 送った側が負け / loser:'receiver' → 受け取った側が負け
+    if (battleChannel) {
+      battleChannel.send({
+        type: 'broadcast', event: 'gameover',
+        payload: { loser: iWin ? 'receiver' : 'sender' }
+      });
     }
     document.getElementById('go-emoji').textContent      = iWin ? '🏆' : '😭';
     document.getElementById('go-title-text').textContent = iWin ? 'あなたの勝ち！' : 'あなたの負け...';
-    document.getElementById('go-best-row').style.display = 'none';
-    document.getElementById('go-retry').style.display    = 'none';
+    document.getElementById('go-best-row').style.display  = 'none';
+    document.getElementById('go-retry').style.display     = 'none';
+    // リマッチボタンを表示・初期化
+    myRematchReady = false;
+    opponentRematchReady = false;
+    document.getElementById('go-rematch').style.display        = 'block';
+    document.getElementById('go-rematch').textContent          = '⚔️ もう一度対戦！';
+    document.getElementById('go-rematch').disabled             = false;
+    document.getElementById('go-rematch-status').style.display = 'block';
+    document.getElementById('go-rematch-status').textContent   = '';
   } else {
     if (score > best) best = score;
     document.getElementById('go-emoji').textContent      = '😱';
@@ -926,6 +949,7 @@ async function createRoom() {
     return;
   }
   const code = genCode();
+  isHostPlayer = true;
   isMyTurn = true;  // ホストが先攻
 
   document.getElementById('battle-create').style.display = 'none';
@@ -950,6 +974,7 @@ async function joinRoom() {
     document.getElementById('btn-join-room').textContent = '🚪 参加する';
     return;
   }
+  isHostPlayer = false;
   isMyTurn = false; // ゲストが後攻
 
   document.getElementById('battle-create').style.display = 'none';
@@ -983,9 +1008,17 @@ function joinChannel(code, isHost) {
     .on('broadcast', { event: 'drop' }, ({ payload }) => {
       receiveDrop(payload);
     })
-    .on('broadcast', { event: 'gameover' }, () => {
-      // 相手が落とした → 自分の勝ち
-      triggerGameOver(true);
+    .on('broadcast', { event: 'gameover' }, ({ payload }) => {
+      // loser:'sender' → 送った側が負け → 自分（受信側）が勝ち
+      if (!isGO) triggerGameOver(payload?.loser === 'sender');
+    })
+    .on('broadcast', { event: 'rematch_ready' }, () => {
+      opponentRematchReady = true;
+      if (myRematchReady) {
+        startRematch();
+      } else {
+        document.getElementById('go-rematch-status').textContent = '相手は準備OK！あなたも押してね';
+      }
     })
     .subscribe(status => {
       if (status === 'SUBSCRIBED' && !isHost) {
@@ -997,8 +1030,34 @@ function joinChannel(code, isHost) {
 
 // ── バトルゲーム開始 ──
 function startBattleGame() {
+  rematchFlip = false;
   isBattleMode = true;
   startGame('s-battle');
+}
+
+// ── リマッチ要求 ──
+function requestRematch() {
+  myRematchReady = true;
+  document.getElementById('go-rematch').textContent = '⏳ 相手を待っています...';
+  document.getElementById('go-rematch').disabled = true;
+  if (battleChannel) battleChannel.send({ type: 'broadcast', event: 'rematch_ready', payload: {} });
+  if (opponentRematchReady) startRematch();
+}
+
+// ── リマッチ開始（両者準備完了） ──
+function startRematch() {
+  myRematchReady = false;
+  opponentRematchReady = false;
+  rematchFlip = !rematchFlip;
+  // 先攻後攻を毎回交代
+  isMyTurn = rematchFlip ? !isHostPlayer : isHostPlayer;
+  cancelAnimationFrame(rafId);
+  initPhysics();
+  resetState();
+  updateTurnIndicator();
+  document.getElementById('go').style.display = 'none';
+  lastT = performance.now();
+  rafId = requestAnimationFrame(loop);
 }
 
 // ── 自分のドロップを相手に送信 ──
@@ -1018,7 +1077,8 @@ function receiveDrop({ src, size, x, angle, nextSrc, nextSize, nextNextSrc, next
 
   const scale = size / PH;
   const item = {
-    img:      po.img,    hull:     po.hullC.map(p => ({ x: p.x * scale, y: p.y * scale })),
+    img:      po.img,
+    hull:     po.hullC.map(p => ({ x: p.x * scale, y: p.y * scale })),
     imgOff:   { x: po.imgOff.x * scale, y: po.imgOff.y * scale },
     displayW: po.dw * scale,
     displayH: po.dh * scale,
@@ -1037,22 +1097,20 @@ function receiveDrop({ src, size, x, angle, nextSrc, nextSize, nextNextSrc, next
   updateTurnIndicator();
 }
 
-// ── ターンインジケーター更新 ──
+// ── ターンインジケーター更新 ──────────────────
 function updateTurnIndicator() {
   const el = document.getElementById('turn-indicator');
+  if (!el) return;
   if (!isBattleMode) { el.style.display = 'none'; return; }
   el.style.display = 'block';
   if (isMyTurn) {
-    el.textContent = '👆 あなたのターン';
-    el.className   = 'my-turn';
+    el.textContent = '🎯 あなたのターン';
+    el.className = 'my-turn';
   } else {
     el.textContent = '⏳ 相手のターン';
-    el.className   = 'their-turn';
+    el.className = 'their-turn';
   }
 }
 
-// ── 起動 ──
 loadAll();
-</script>
-</body>
-</html>
+</script></body></html>
