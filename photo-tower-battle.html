@@ -972,4 +972,63 @@ function joinChannel(code, isHost) {
     .subscribe(status => {
       if (status === 'SUBSCRIBED' && !isHost) {
         // ゲストが接続完了 → ホストに通知
-        battleChannel.send({ type: 'broadcast', event: 'ready', payload: {} });
+        battleChannel.send({ type: 'broadcast', event: 'ready', payload: {} });        document.querySelector('#room-display .waiting-text').textContent = 'ホストの開始を待っています...';
+      }
+    });
+}
+
+// ── バトルゲーム開始 ──
+function startBattleGame() {
+  isBattleMode = true;
+  startGame('s-battle');
+}
+
+// ── 自分のドロップを相手に送信 ──
+function sendDrop(src, size, x, angle) {
+  if (!battleChannel) return;
+  battleChannel.send({
+    type: 'broadcast', event: 'drop',
+    payload: { src, size, x, angle }
+  });
+}
+
+// ── 相手のドロップを受信して物理シミュレーションに反映 ──
+function receiveDrop({ src, size, x, angle }) {
+  const po = procObjs.find(p => p.src === src);
+  if (!po || isGO) return;
+
+  const scale  = size / PH;
+  const item = {
+    img:      po.img,
+    hull:     po.hullC.map(p => ({ x: p.x * scale, y: p.y * scale })),
+    imgOff:   { x: po.imgOff.x * scale, y: po.imgOff.y * scale },
+    displayW: po.dw * scale,
+    displayH: po.dh * scale,
+  };
+
+  dropBody(item, x, angle);
+  score++;
+
+  isMyTurn = true;
+  updateTurnIndicator();
+}
+
+// ── ターンインジケーター更新 ──
+function updateTurnIndicator() {
+  const el = document.getElementById('turn-indicator');
+  if (!isBattleMode) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  if (isMyTurn) {
+    el.textContent = '👆 あなたのターン';
+    el.className   = 'my-turn';
+  } else {
+    el.textContent = '⏳ 相手のターン';
+    el.className   = 'their-turn';
+  }
+}
+
+// ── 起動 ──
+loadAll();
+</script>
+</body>
+</html>
