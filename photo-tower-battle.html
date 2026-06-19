@@ -185,7 +185,7 @@ body {
 <!-- タイトル画面 -->
 <div id="s-title">
   <div class="title">WSDLタワー</div>
-  <div style="font-size:11px; color:rgba(255,255,255,.4); margin-top:-12px;">v2.1</div>
+  <div style="font-size:11px; color:rgba(255,255,255,.4); margin-top:-12px;">v2.2</div>
   <div class="desc">台の上に写真キャラを積み上げよう<br>一つでも落としたらゲームオーバー</div>
   <div id="load-status">画像を読み込み中...</div>
   <button id="btn-start" disabled onclick="startSolo()">🎮 ソロプレイ</button>
@@ -213,7 +213,13 @@ body {
 <!-- パッチノートポップアップ -->
 <div id="patch-overlay" onclick="closePatch()">
   <div id="patch-box" onclick="event.stopPropagation()">
-    <h3>📋 v2.1 パッチノート</h3>
+    <h3>📋 v2.2 パッチノート</h3>
+    <ul>
+      <li>対戦の勝敗判定を修正（落とした側が正しく負けに）</li>
+      <li>対戦後にリマッチできるボタンを追加</li>
+      <li>落下オブジェクトのキューを両プレイヤーで同期</li>
+    </ul>
+    <h3 style="font-size:15px; color:rgba(255,215,0,.6); margin:16px 0 10px;">📋 v2.1</h3>
     <ul>
       <li>2台のスマホで遊べる対戦モードを追加</li>
       <li>タイトルにソロ・対戦の選択ボタンを追加</li>
@@ -1099,8 +1105,7 @@ function receiveDrop({ src, size, x, angle, nextSrc, nextSize, nextNextSrc, next
 
 // ── ターンインジケーター更新 ──────────────────
 function updateTurnIndicator() {
-  const el = document.getElementById('turn-indicator');
-  if (!el) return;
+  const el = document.getElementById('turn-indic  if (!el) return;
   if (!isBattleMode) { el.style.display = 'none'; return; }
   el.style.display = 'block';
   if (isMyTurn) {
