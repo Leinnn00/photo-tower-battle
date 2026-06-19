@@ -247,7 +247,6 @@ body {
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 <script>
 
@@ -856,7 +855,22 @@ const SUPABASE_URL = 'https://hevfrfgnuganjnrjivgw.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_e8tL2pXp_19HriWlgHugMQ_G6vI6Rgd';
 
 function initSupabase() {
-  if (!sbClient) sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  return new Promise((resolve, reject) => {
+    if (sbClient) { resolve(); return; }
+    if (window.supabase) {
+      sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      resolve(); return;
+    }
+    // 対戦ボタンを押したときだけ動的にロード
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
+    s.onload = () => {
+      sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      resolve();
+    };
+    s.onerror = () => reject(new Error('Supabase の読み込みに失敗しました'));
+    document.head.appendChild(s);
+  });
 }
 
 // ── バトルロビーを開く ──
@@ -882,8 +896,17 @@ function genCode() {
 }
 
 // ── ルームを作る（ホスト） ──
-function createRoom() {
-  initSupabase();
+async function createRoom() {
+  document.getElementById('btn-create-room').disabled = true;
+  document.getElementById('btn-create-room').textContent = '接続中...';
+  try {
+    await initSupabase();
+  } catch (e) {
+    alert('接続に失敗しました。ネットを確認してね。');
+    document.getElementById('btn-create-room').disabled = false;
+    document.getElementById('btn-create-room').textContent = '🏠 ルームを作る';
+    return;
+  }
   const code = genCode();
   isMyTurn = true;  // ホストが先攻
 
@@ -895,10 +918,20 @@ function createRoom() {
 }
 
 // ── ルームに参加（ゲスト） ──
-function joinRoom() {
-  initSupabase();
+async function joinRoom() {
   const code = document.getElementById('room-input').value.trim();
   if (code.length < 4) { alert('4桁のコードを入力してね'); return; }
+
+  document.getElementById('btn-join-room').disabled = true;
+  document.getElementById('btn-join-room').textContent = '接続中...';
+  try {
+    await initSupabase();
+  } catch (e) {
+    alert('接続に失敗しました。ネットを確認してね。');
+    document.getElementById('btn-join-room').disabled = false;
+    document.getElementById('btn-join-room').textContent = '🚪 参加する';
+    return;
+  }
   isMyTurn = false; // ゲストが後攻
 
   document.getElementById('battle-create').style.display = 'none';
@@ -940,50 +973,3 @@ function joinChannel(code, isHost) {
       if (status === 'SUBSCRIBED' && !isHost) {
         // ゲストが接続完了 → ホストに通知
         battleChannel.send({ type: 'broadcast', event: 'ready', payload: {} });
-        document.querySelector('#room-display .waiting-text').textContent = 'ホストの開始を待っています...';
-      }
-    });
-}
-
-// ── バトルゲーム開始 ──
-function startBattleGame() {
-  isBattleMode = true;
-  startGame('s-battle');
-}
-
-// ── 自分のドロップを相手に送信 ──
-function sendDrop(src, size, x, angle) {
-  if (!battleChannel) return;
-  battleChannel.send({
-    type: 'broadcast', event: 'drop',
-    payload: { src, size, x, angle }
-  });
-}
-
-// ── 相手のドロップを受信して物理シミュレーションに反映 ──
-function receiveDrop({ src, size, x, angle }) {
-  const po = procObjs.find(p => p.src === src);
-  if (!po || isGO) return;
-
-  const scale  = size / PH;
-  const item = {
-    img:      po.img,
-    hull:     po.hullC.map(p => ({ x: p.x * scale, y: p.y * scale })),
-    imgOff:   { x: po.imgOff.x * scale, y: po.imgOff.y * scale },
-    displayW: po.dw * scale,
-    displayH: po.dh * scale,
-  };
-
-  dropBody(item, x, angle);
-  score++;
-
-  isMyTurn = true;
-  updateTurnIndicator();
-}
-
-// ── ターンインジケーター更新 ──
-function updateTurnIndicator() {
-  const el = document.getElementById('turn-indicator');
-  if (!isBattleMode) { el.style.display = 'none'; return; }
-  el.style.display = 'block';
-  if (isM
