@@ -211,7 +211,12 @@ body {
 <!-- パッチノートポップアップ -->
 <div id="patch-overlay" onclick="closePatch()">
   <div id="patch-box" onclick="event.stopPropagation()">
-    <h3>📋 v2.0 パッチノート</h3>
+    <h3>📋 v2.1 パッチノート</h3>
+    <ul>
+      <li>2台のスマホで遊べる対戦モードを追加</li>
+      <li>タイトルにソロ・対戦の選択ボタンを追加</li>
+    </ul>
+    <h3 style="font-size:15px; color:rgba(255,215,0,.6); margin:16px 0 10px;">📋 v2.0</h3>
     <ul>
       <li>背景の雲を削除</li>
       <li>NEXTボックスに枠と名前表示を追加</li>
@@ -981,17 +986,4 @@ function updateTurnIndicator() {
   const el = document.getElementById('turn-indicator');
   if (!isBattleMode) { el.style.display = 'none'; return; }
   el.style.display = 'block';
-  if (isMyTurn) {
-    el.textContent = '👆 あなたのターン';
-    el.className   = 'my-turn';
-  } else {
-    el.textContent = '⏳ 相手のターン';
-    el.className   = 'their-turn';
-  }
-}
-
-// ── 起動 ──
-loadAll();
-</script>
-</body>
-</html>
+  if (isM
