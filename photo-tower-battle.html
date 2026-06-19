@@ -1105,7 +1105,8 @@ function receiveDrop({ src, size, x, angle, nextSrc, nextSize, nextNextSrc, next
 
 // ── ターンインジケーター更新 ──────────────────
 function updateTurnIndicator() {
-  const el = document.getElementById('turn-indic  if (!el) return;
+  const el = document.getElementById('turn-indicator');
+  if (!el) return;
   if (!isBattleMode) { el.style.display = 'none'; return; }
   el.style.display = 'block';
   if (isMyTurn) {
@@ -1118,4 +1119,4 @@ function updateTurnIndicator() {
 }
 
 loadAll();
-</script></body></html>
+</script></body>
