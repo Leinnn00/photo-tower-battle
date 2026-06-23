@@ -271,6 +271,7 @@ body {
     <ul>
       <li>ランキング機能を追加（名前入力でスコアを登録）</li>
       <li>ベスト記録のみランキングに反映</li>
+      <li>落下予測線を削除</li>
     </ul>
     <h3 style="font-size:15px; color:rgba(255,215,0,.6); margin:16px 0 10px;">📋 v2.2</h3>
     <ul>
@@ -829,15 +830,15 @@ function render() {
 
   if (pending && canDrop && !isGO) {
     const { img, displayW, displayH, imgOff } = pending;
-    ctx.save();
-    ctx.setLineDash([5, 5]);
-    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(dropperX, DROP_Y + displayH * 0.5);
-    ctx.lineTo(dropperX, PLAT_Y - PLAT_H / 2);
-    ctx.stroke();
-    ctx.restore();
+    // ctx.save();
+    // ctx.setLineDash([5, 5]);
+    // ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+    // ctx.lineWidth = 1.5;
+    // ctx.beginPath();
+    // ctx.moveTo(dropperX, DROP_Y + displayH * 0.5);
+    // ctx.lineTo(dropperX, PLAT_Y - PLAT_H / 2);
+    // ctx.stroke();
+    // ctx.restore();
 
     ctx.save();
     ctx.globalAlpha = 0.82;
